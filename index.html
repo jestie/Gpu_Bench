@@ -1,0 +1,366 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPU Dash</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0b0f19; --card: #121827; --card-hi: #172036; --line: #232c42;
+    --text: #e6e9f2; --muted: #7d869c; --dim: #4c5570;
+    --teal: #6fd3e0; --green: #a6d96a; --amber: #f2c661; --orange: #f0915a;
+    --violet: #b39cf5; --pink: #ef6f8f; --red: #ff5c5c;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    background: radial-gradient(circle at 1px 1px, #1a2133 1px, transparent 0) 0 0/22px 22px, var(--bg);
+    color: var(--text); font: 14px/1.4 Inter, system-ui, sans-serif; min-height: 100vh; padding: 28px 32px;
+  }
+  .mono { font-family: "JetBrains Mono", ui-monospace, monospace; }
+  header { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; margin-bottom: 22px; }
+  h1 { font-size: 30px; font-weight: 500; letter-spacing: -.5px; }
+  h1 span { color: var(--violet); }
+  .sub { color: var(--muted); font-size: 13px; }
+  .pill { margin-left: auto; display: flex; align-items: center; gap: 8px; padding: 7px 16px;
+    border: 1px solid var(--line); border-radius: 999px; font-size: 12px; letter-spacing: 1.5px; font-weight: 600; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--dim); }
+  .busy .dot { background: var(--teal); box-shadow: 0 0 10px var(--teal); animation: pulse 1.2s infinite; }
+  @keyframes pulse { 50% { opacity: .4; } }
+
+  .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 14px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 18px 20px;
+    display: flex; flex-direction: column; min-width: 0; }
+  .hero { grid-column: span 6; border-color: #3b7f8a; background: linear-gradient(160deg, var(--card-hi), var(--card)); }
+  .c3 { grid-column: span 3; } .c4 { grid-column: span 4; } .c5 { grid-column: span 5; } .c6 { grid-column: span 6; }
+  .label { font-size: 11px; letter-spacing: 1.6px; text-transform: uppercase; font-weight: 600; }
+  .big { font-family: "JetBrains Mono", monospace; font-weight: 300; font-size: 44px; line-height: 1.1; }
+  .big small { font-size: 13px; color: var(--muted); font-weight: 400; margin-left: 4px; }
+  .note { color: var(--muted); font-size: 12px; }
+  .row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+  .foot { margin-top: auto; padding-top: 12px; display: flex; justify-content: space-between; gap: 12px;
+    font-size: 11px; letter-spacing: 1.2px; color: var(--muted); text-transform: uppercase; }
+  .foot b { color: var(--text); font-family: "JetBrains Mono", monospace; font-weight: 400; letter-spacing: 0; text-transform: none; font-size: 13px; }
+  svg.spark { width: 100%; height: 120px; margin-top: 12px; display: block; }
+  .hero svg.spark { height: 170px; }
+  .bar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: #1c2438; margin: 14px 0 10px; }
+  .bar div { height: 100%; transition: width .6s; border-right: 2px solid var(--card); }
+  .thin { height: 5px; margin: 6px 0 12px; }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 6px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; font-size: 12px; margin-top: 10px; }
+  .kv dt { color: var(--muted); text-transform: uppercase; letter-spacing: 1.2px; font-size: 11px; }
+  .kv dd { text-align: right; font-family: "JetBrains Mono", monospace; }
+  .list { font-size: 12px; margin-top: 8px; display: grid; gap: 5px; }
+  .list div { display: flex; justify-content: space-between; gap: 10px; }
+  .list span:last-child { color: var(--muted); font-family: "JetBrains Mono", monospace; }
+  .model-name { font-size: 22px; font-weight: 600; margin-top: 8px; }
+  .c12 { grid-column: span 12; }
+  button { font: 600 11px Inter, sans-serif; letter-spacing: 1.2px; text-transform: uppercase; color: var(--bg);
+    background: var(--amber); border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
+  button.mini { padding: 4px 10px; font-size: 10px; background: transparent; color: var(--teal); border: 1px solid var(--line); }
+  button:disabled { opacity: .4; cursor: default; }
+  .lb-head, .lb-row { display: grid; grid-template-columns: minmax(150px, 1.6fr) 2fr 70px 80px 80px 60px 90px 64px;
+    gap: 12px; align-items: center; font-size: 12px; }
+  .lb-head { margin-top: 16px; padding: 0 0 8px; border-bottom: 1px solid var(--line); color: var(--muted);
+    font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; }
+  .lb { max-height: 380px; overflow-y: auto; }
+  .lb-row { padding: 7px 0; border-bottom: 1px solid #1a2236; }
+  .lb-row .mono { text-align: right; }
+  .lb-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lb-row .name small { color: var(--muted); margin-left: 6px; }
+  .lb-bar { height: 8px; border-radius: 3px; background: linear-gradient(90deg, var(--teal), var(--green)); }
+  .tag { font-size: 10px; padding: 2px 8px; border-radius: 999px; border: 1px solid; justify-self: start; white-space: nowrap; }
+  .crown { color: var(--amber); margin-right: 4px; }
+  @media (max-width: 900px) { .lb-head, .lb-row { grid-template-columns: 1fr 70px 64px; }
+    .lb-head span:nth-child(n+2):not(:nth-child(3)):not(:last-child), .lb-row > :nth-child(n+2):not(:nth-child(3)):not(:last-child) { display: none; } }
+  @media (max-width: 1100px) { .hero, .c3, .c4, .c5, .c6 { grid-column: span 6; } }
+  @media (max-width: 700px) { body { padding: 16px; } .hero, .c3, .c4, .c5, .c6 { grid-column: span 12; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>GPU <span>Dash</span></h1>
+  <div class="sub mono" id="ident">connecting…</div>
+  <div class="pill" id="status"><span class="dot"></span><span id="statusText">IDLE</span></div>
+</header>
+
+<main class="grid">
+  <section class="card hero">
+    <div class="row">
+      <div><div class="label" style="color:var(--teal)">Generation</div><div class="note" id="genNote">—</div></div>
+      <div class="big" style="font-size:56px" id="tps">–<small>tok/s</small></div>
+    </div>
+    <svg class="spark" id="sTps" viewBox="0 0 120 50" preserveAspectRatio="none"></svg>
+    <div class="foot"><span>Min <b id="tMin">–</b></span><span>Avg <b id="tAvg">–</b></span><span>Max <b id="tMax">–</b></span><span>Prompt <b id="pTps">–</b> tok/s</span></div>
+  </section>
+
+  <section class="card c3">
+    <div class="label" style="color:var(--green)">Usage</div>
+    <div class="row" style="justify-content:flex-start;gap:28px;margin-top:6px">
+      <div><div class="note">GPU</div><div class="big" style="font-size:34px" id="gpu2">–<small>%</small></div></div>
+      <div><div class="note">CPU</div><div class="big" style="font-size:34px" id="cpu">–<small>%</small></div></div>
+    </div>
+    <svg class="spark" id="sUse" viewBox="0 0 120 50" preserveAspectRatio="none"></svg>
+    <div class="foot"><span>GPU avg <b id="gAvg">–</b></span><span>Mem bus <b id="memBus">–</b></span></div>
+  </section>
+
+  <section class="card c3">
+    <div class="label" style="color:var(--amber)">Power</div>
+    <div class="big" style="margin-top:6px" id="power">–<small>W</small></div>
+    <div class="note" id="powerNote">—</div>
+    <svg class="spark" id="sPow" viewBox="0 0 120 50" preserveAspectRatio="none"></svg>
+    <div class="foot"><span>This session</span><b id="energy">–</b></div>
+  </section>
+
+  <section class="card c6">
+    <div class="row">
+      <div class="label" style="color:var(--amber)">VRAM</div>
+      <div><span class="mono" style="color:var(--amber);font-size:20px" id="vramPct">–</span>
+        <span class="mono" style="font-size:20px;margin-left:8px" id="vramUsed">–</span>
+        <span class="note" id="vramTotal"></span></div>
+    </div>
+    <div class="bar" id="vramBar"></div>
+    <div class="legend" id="vramLegend"></div>
+    <div class="list" id="procs"></div>
+  </section>
+
+  <section class="card c3">
+    <div class="label" style="color:var(--orange)">Thermals</div>
+    <div class="big" style="margin-top:6px" id="temp">–<small>°C</small></div>
+    <div class="note" id="tempNote">—</div>
+    <svg class="spark" id="sTemp" viewBox="0 0 120 50" preserveAspectRatio="none"></svg>
+    <div class="foot"><span>Session peak</span><b id="tPeak">–</b></div>
+  </section>
+
+  <section class="card c3">
+    <div class="label" style="color:var(--violet)">Model</div>
+    <div class="model-name" id="model">No model loaded</div>
+    <div class="note mono" id="modelSub">Ollama idle</div>
+    <dl class="kv" id="modelKv"></dl>
+    <div class="foot"><span id="installed">–</span></div>
+  </section>
+
+  <section class="card c4">
+    <div class="label" style="color:var(--teal)">Clocks</div>
+    <dl class="kv" id="clocks"></dl>
+  </section>
+
+  <section class="card c4">
+    <div class="label" style="color:var(--violet)">System RAM</div>
+    <div class="row" style="margin-top:6px"><span class="mono" style="font-size:22px" id="ram">–</span><span class="note" id="ramNote"></span></div>
+    <div class="bar thin"><div id="ramBar" style="background:var(--violet);width:0"></div></div>
+    <div class="label" style="color:var(--pink);margin-top:6px">Storage</div>
+    <div id="disks"></div>
+  </section>
+
+  <section class="card c4">
+    <div class="label" style="color:var(--muted)">Card</div>
+    <dl class="kv" id="card"></dl>
+  </section>
+
+  <section class="card c12">
+    <div class="row" style="flex-wrap:wrap">
+      <div>
+        <div class="label" style="color:var(--amber)">Leaderboard · your models on this GPU</div>
+        <div class="note" id="benchNote">Same prompt, 256 tokens, cold start. Results are saved between runs.</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button id="benchAll">Bench untested</button>
+        <button id="benchCancel" class="ghost">Cancel queue</button>
+      </div>
+    </div>
+    <div class="lb-head"><span>Model</span><span>Speed</span><span>tok/s</span><span>J/token</span><span>Prompt</span><span>Load</span><span>Fit</span><span></span></div>
+    <div class="lb" id="lb"></div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const GiB = b => (b / 2 ** 30).toFixed(1);
+const fmt = (v, d = 0) => v == null ? '–' : (+v).toFixed(d);
+let peak = 0;
+
+function spark(el, series) {
+  // series: [{data, color, max}]
+  const W = 120, H = 50, N = 120;
+  el.innerHTML = series.map(({ data, color, max }) => {
+    if (!data.length) return '';
+    const pts = data.map((v, i) => [W - (data.length - 1 - i) * (W / (N - 1)), H - 2 - (Math.min(v ?? 0, max) / max) * (H - 6)]);
+    const line = pts.map(p => p.join(',')).join(' ');
+    const [lx, ly] = pts[pts.length - 1];
+    return `<polygon points="${pts[0][0]},${H} ${line} ${lx},${H}" fill="${color}" opacity=".13"/>
+      <polyline points="${line}" fill="none" stroke="${color}" stroke-width="1.4" vector-effect="non-scaling-stroke" stroke-linejoin="round"/>
+      <circle cx="${lx}" cy="${ly}" r="1.2" fill="${color}" vector-effect="non-scaling-stroke"/>`;
+  }).join('');
+}
+
+const kv = (el, rows) => el.innerHTML = rows.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('');
+
+function render({ static: s, live: l, history: h }) {
+  if (!l || l.gpu == null) return;
+  const gen = l.gen, b = l.bench;
+  const generating = gen.active.length > 0;
+  const busy = generating || l.gpu > 20;
+  $('status').classList.toggle('busy', busy);
+  $('statusText').textContent = b.current ? 'BENCHMARKING' : generating ? 'GENERATING'
+    : busy ? 'GPU BUSY' : l.loaded.length ? 'MODEL READY' : 'IDLE';
+  $('ident').textContent = `${s.name} · driver ${s.driver} · CUDA ${s.cuda}`;
+
+  // Generation: live rate while streaming, otherwise the last finished request
+  const last = gen.done[gen.done.length - 1];
+  const shown = generating ? gen.live_tps : last ? last.tps : null;
+  $('tps').innerHTML = `${shown == null ? '–' : shown.toFixed(1)}<small>tok/s</small>`;
+  if (generating) {
+    const a = gen.active[0];
+    $('genNote').textContent = `Generating now · ${a.model} · ${a.tokens} tokens`;
+  } else if (last) {
+    $('genNote').textContent = `Last: ${last.model} · ${last.out} out · ${Math.round((Date.now() / 1000 - last.at) / 60)} min ago`;
+  } else {
+    $('genNote').textContent = `Waiting. Point clients at ${s.proxy} to see them here`;
+  }
+  const rates = gen.done.map(d => d.tps).filter(Boolean);
+  const r1 = v => v.toFixed(1);
+  $('tMin').textContent = rates.length ? r1(Math.min(...rates)) : '–';
+  $('tMax').textContent = rates.length ? r1(Math.max(...rates)) : '–';
+  $('tAvg').textContent = rates.length ? r1(rates.reduce((a, c) => a + c, 0) / rates.length) : '–';
+  $('pTps').textContent = last && last.prompt_tps ? fmt(last.prompt_tps) : '–';
+  spark($('sTps'), [{ data: h.tps, color: 'var(--teal)', max: Math.max(10, ...h.tps) * 1.1 }]);
+
+  $('gpu2').innerHTML = `${fmt(l.gpu)}<small>%</small>`;
+  const g = h.gpu.filter(v => v != null);
+  $('gAvg').textContent = (g.reduce((a, c) => a + c, 0) / g.length).toFixed(0) + '%';
+  $('memBus').textContent = fmt(l.mem_bus) + '%';
+  $('cpu').innerHTML = `${fmt(l.cpu)}<small>%</small>`;
+  spark($('sUse'), [{ data: h.cpu, color: 'var(--green)', max: 100 }, { data: h.gpu, color: 'var(--teal)', max: 100 }]);
+
+  $('power').innerHTML = `${fmt(l.power)}<small>W of ${fmt(s.power_limit)}</small>`;
+  $('powerNote').textContent = generating && gen.live_tps > 0
+    ? `${(l.power / gen.live_tps).toFixed(2)} J per token`
+    : `${fmt(l.power / s.power_limit * 100)}% of power limit · ${l.pstate}`;
+  $('energy').textContent = l.energy_wh.toFixed(2) + ' Wh';
+  spark($('sPow'), [{ data: h.power, color: 'var(--amber)', max: s.power_limit }]);
+
+  peak = Math.max(peak, l.temp);
+  $('temp').innerHTML = `${fmt(l.temp)}<small>°C, the GPU</small>`;
+  $('tempNote').textContent = `fan ${fmt(l.fan)}%`;
+  $('tPeak').textContent = peak + ' °C';
+  spark($('sTemp'), [{ data: h.temp, color: 'var(--orange)', max: 95 }]);
+
+  // VRAM: Ollama models / everything else / free
+  const total = s.vram_total, used = l.vram_used;
+  const modelMiB = l.loaded.reduce((a, m) => a + (m.size_vram || 0), 0) / 2 ** 20;
+  const other = Math.max(used - modelMiB, 0), free = Math.max(total - used, 0);
+  $('vramPct').textContent = fmt(used / total * 100) + '%';
+  $('vramUsed').textContent = (used / 1024).toFixed(1);
+  $('vramTotal').textContent = `of ${(total / 1024).toFixed(0)} GiB`;
+  const segs = [['Model', modelMiB, 'var(--amber)'], ['Other apps', other, 'var(--violet)'], ['Free', free, '#3a4359']];
+  $('vramBar').innerHTML = segs.map(([, v, c]) => `<div style="width:${v / total * 100}%;background:${c}"></div>`).join('');
+  $('vramLegend').innerHTML = segs.map(([n, v, c]) => `<span><i style="background:${c}"></i>${n} ${(v / 1024).toFixed(1)}</span>`).join('');
+  const procs = l.procs.filter(p => p.mem != null);
+  $('procs').innerHTML = procs.length ? procs.map(p => `<div><span>${p.name.split(/[\\/]/).pop()}</span><span>${(p.mem / 1024).toFixed(1)} GiB</span></div>`).join('')
+    : '<div class="note">Per-process VRAM isn\'t reported under WSL</div>';
+
+  if (l.loaded.length) {
+    const m = l.loaded[0], d = m.details || {};
+    $('model').textContent = m.name;
+    $('modelSub').textContent = `${d.family || ''} · ${d.parameter_size || ''}`;
+    const until = m.expires_at ? Math.max(0, Math.round((new Date(m.expires_at) - Date.now()) / 60000)) + ' min' : '–';
+    kv($('modelKv'), [['VRAM', GiB(m.size_vram) + ' GiB'], ['Quant', d.quantization_level || '–'],
+      ['Context', m.context_length ? (m.context_length / 1024).toFixed(0) + 'k' : '–'], ['On GPU', m.size ? fmt(m.size_vram / m.size * 100) + '%' : '–'], ['Unloads in', until]]);
+  } else {
+    $('model').textContent = 'No model loaded';
+    $('modelSub').textContent = l.ollama_up ? 'Ollama running, idle' : 'Ollama not reachable';
+    kv($('modelKv'), l.installed.slice(0, 4).map(m => [m.name, m.params || GiB(m.size) + ' GiB']));
+  }
+  $('installed').textContent = `${l.installed.length} installed`;
+
+  kv($('clocks'), [
+    ['Core', `${fmt(l.sm)} / ${fmt(s.max_sm)} MHz`], ['Memory', `${fmt(l.mem_clock)} / ${fmt(s.max_mem)} MHz`],
+    ['Perf state', l.pstate], ['PCIe link', l.pcie], ['Fan', fmt(l.fan) + '%']]);
+
+  $('ram').textContent = `${GiB(l.ram_used)} / ${GiB(l.ram_total)} GiB`;
+  $('ramNote').textContent = fmt(l.ram_used / l.ram_total * 100) + '%';
+  $('ramBar').style.width = (l.ram_used / l.ram_total * 100) + '%';
+  $('disks').innerHTML = (l.disks || []).map(d => {
+    const pct = (1 - d.free / d.total) * 100;
+    return `<div class="row" style="margin-top:8px;font-size:12px"><span class="note">${d.label}</span><span class="mono">${GiB(d.free)} GiB free</span></div>
+      <div class="bar thin"><div style="width:${pct}%;background:${pct > 90 ? 'var(--red)' : 'var(--pink)'}"></div></div>`;
+  }).join('');
+
+  kv($('card'), [['GPU', s.name.replace('NVIDIA GeForce ', '')], ['VRAM', (s.vram_total / 1024).toFixed(0) + ' GiB'],
+    ['Power limit', fmt(s.power_limit) + ' W'], ['Driver', s.driver], ['CUDA', s.cuda], ['VBIOS', s.vbios],
+    ['Host CPU', s.cpu_name.replace(/\(R\)|\(TM\)|CPU|Processor/g, '').replace(/\s+/g, ' ').trim()]]);
+}
+
+// Leaderboard: rebuilt only when its data changes, so the buttons don't flicker
+let boardSig = '';
+function renderBoard({ static: s, live: l }) {
+  if (!l || !l.bench) return;
+  const { results, queue, current } = l.bench;
+  const modelMiB = l.loaded.reduce((a, m) => a + (m.size_vram || 0), 0) / 2 ** 20;
+  const budget = (s.vram_total - Math.max(l.vram_used - modelMiB, 0)) * 2 ** 20;  // VRAM left for a model
+  const fit = (m, r) => {
+    if (r && r.vram && r.size) {
+      const pct = r.vram / r.size * 100;
+      return pct > 99 ? ['100% GPU', 'var(--green)'] : [`${pct.toFixed(0)}% GPU`, 'var(--orange)'];
+    }
+    const need = m.size * 1.2;  // weights plus a modest KV cache
+    return need <= budget ? ['Should fit', 'var(--green)'] : need <= budget + l.ram_total * 0.5
+      ? ['Spills to CPU', 'var(--orange)'] : ['Too big', 'var(--red)'];
+  };
+  const rows = l.installed.filter(m => !/embed|bert/i.test(m.name + m.family)).map(m => ({ m, r: results[m.name] }));
+  rows.sort((a, b) => ((b.r && b.r.tps) || -1) - ((a.r && a.r.tps) || -1) || a.m.size - b.m.size);
+  const best = Math.max(1, ...rows.map(x => (x.r && x.r.tps) || 0));
+  const sig = JSON.stringify([rows.map(x => x.m.name), results, queue, current && current.model, current && current.phase, Math.round(budget / 2 ** 30)]);
+  if (sig === boardSig) {
+    if (current) { const el = document.querySelector(`[data-live="${CSS.escape(current.model)}"]`); if (el) el.textContent = `${current.tokens} tok…`; }
+    return;
+  }
+  boardSig = sig;
+  const tested = rows.filter(x => x.r && x.r.tps).length;
+  $('benchNote').textContent = current
+    ? `Running ${current.model} (${current.phase})${queue.length ? ` · ${queue.length} queued` : ''}`
+    : `${tested} of ${rows.length} models tested · same prompt, 256 tokens, cold start`;
+  $('benchAll').disabled = rows.every(x => x.r) || !!queue.length;
+  $('benchCancel').disabled = !queue.length;
+  $('lb').innerHTML = rows.map(({ m, r }, i) => {
+    const [fitText, fitColor] = fit(m, r);
+    const running = current && current.model === m.name, queued = queue.includes(m.name);
+    const action = running ? `<span class="note" data-live="${m.name}">${current.phase}…</span>`
+      : queued ? '<span class="note">queued</span>'
+      : `<button class="mini" data-bench="${m.name}">${r ? 'Rerun' : 'Run'}</button>`;
+    const ok = r && r.tps;
+    return `<div class="lb-row">
+      <span class="name">${i === 0 && ok ? '<span class="crown">♛</span>' : ''}${m.name}<small>${m.params || ''} ${m.quant || ''}</small></span>
+      <span>${ok ? `<div class="lb-bar" style="width:${r.tps / best * 100}%"></div>` : r && r.error ? `<span class="note" title="${r.error.replace(/"/g, '&quot;')}">failed</span>` : '<span class="note">not tested</span>'}</span>
+      <span class="mono">${ok ? r.tps.toFixed(1) : '–'}</span>
+      <span class="mono">${ok && r.j_per_tok ? r.j_per_tok.toFixed(2) : '–'}</span>
+      <span class="mono">${ok && r.prompt_tps ? fmt(r.prompt_tps) : '–'}</span>
+      <span class="mono">${ok ? r.load_s.toFixed(1) + 's' : '–'}</span>
+      <span class="tag" style="color:${fitColor};border-color:${fitColor}">${fitText}</span>
+      <span>${action}</span></div>`;
+  }).join('');
+  window._untested = rows.filter(x => !x.r).map(x => x.m.name);
+}
+
+const post = (path, body) => fetch(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+$('lb').addEventListener('click', e => { const m = e.target.dataset.bench; if (m) { e.target.disabled = true; post('/bench', { models: [m] }); } });
+$('benchAll').addEventListener('click', () => {
+  const n = (window._untested || []).length;
+  if (n && confirm(`Benchmark ${n} untested models one after another? Each loads cold, so big ones can take a few minutes.`))
+    post('/bench', { models: window._untested });
+});
+$('benchCancel').addEventListener('click', () => post('/bench/cancel'));
+
+function connect() {
+  const es = new EventSource('/stream');
+  es.onmessage = e => { const d = JSON.parse(e.data); render(d); renderBoard(d); };
+  es.onerror = () => { $('statusText').textContent = 'OFFLINE'; };
+}
+connect();
+</script>
+</body>
+</html>
