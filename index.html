@@ -57,6 +57,18 @@
   .list span:last-child { color: var(--muted); font-family: "JetBrains Mono", monospace; }
   .model-name { font-size: 22px; font-weight: 600; margin-top: 8px; }
   .c12 { grid-column: span 12; }
+  .game-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 32px; }
+  .game-name { font-size: 26px; font-weight: 600; margin-top: 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #gameCard.playing { border-color: #8a3b55; background: linear-gradient(160deg, #22182a, var(--card)); }
+  .apps-head, .app-row { display: grid; grid-template-columns: minmax(0, 1.6fr) 52px minmax(0, 1fr) 70px; gap: 12px; align-items: center; font-size: 12px; }
+  .apps-head { margin-top: 12px; padding-bottom: 6px; border-bottom: 1px solid var(--line); color: var(--muted); font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; }
+  .app-row { padding: 6px 0; border-bottom: 1px solid #1a2236; }
+  .app-row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-row .mono { text-align: right; }
+  .app-bar { height: 6px; border-radius: 3px; background: var(--teal); min-width: 1px; }
+  .app-row.is-game .name { color: var(--pink); font-weight: 600; }
+  .app-row.is-game .app-bar { background: var(--pink); }
+  @media (max-width: 900px) { .game-grid { grid-template-columns: 1fr; } }
   button { font: 600 11px Inter, sans-serif; letter-spacing: 1.2px; text-transform: uppercase; color: var(--bg);
     background: var(--amber); border: 0; border-radius: 999px; padding: 8px 14px; cursor: pointer; }
   button.ghost { background: transparent; color: var(--muted); border: 1px solid var(--line); }
@@ -159,6 +171,27 @@
   <section class="card c4">
     <div class="label" style="color:var(--muted)">Card</div>
     <dl class="kv" id="card"></dl>
+  </section>
+
+  <section class="card c12" id="gameCard">
+    <div class="game-grid">
+      <div>
+        <div class="label" style="color:var(--pink)">Now playing</div>
+        <div class="game-name" id="gameName">No game running</div>
+        <div class="note" id="gameNote">Start a game and it shows up here</div>
+        <div class="row" style="justify-content:flex-start;gap:32px;margin-top:14px">
+          <div><div class="note">GPU</div><div class="big" style="font-size:38px" id="gameGpu">–<small>%</small></div></div>
+          <div><div class="note">VRAM</div><div class="big" style="font-size:38px" id="gameVram">–<small>GiB</small></div></div>
+        </div>
+        <svg class="spark" id="sGame" viewBox="0 0 120 50" preserveAspectRatio="none" style="height:90px"></svg>
+        <div class="foot"><span>Avg <b id="gAvgG">–</b></span><span>Peak <b id="gPeak">–</b></span><span>Draw <b id="gPow">–</b></span><span>Hottest <b id="gTemp">–</b></span></div>
+      </div>
+      <div>
+        <div class="label" style="color:var(--muted)">Who's using the GPU · Windows</div>
+        <div class="apps-head"><span>App</span><span>GPU</span><span></span><span>VRAM</span></div>
+        <div id="apps"></div>
+      </div>
+    </div>
   </section>
 
   <section class="card c12">
@@ -295,6 +328,36 @@ function render({ static: s, live: l, history: h }) {
     ['Host CPU', s.cpu_name.replace(/\(R\)|\(TM\)|CPU|Processor/g, '').replace(/\s+/g, ' ').trim()]]);
 }
 
+function renderGame({ live: l }) {
+  const a = l && l.apps;
+  if (!a) return;
+  const esc = t => String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  const g = a.game, playing = !!(g && g.active);
+  $('gameCard').classList.toggle('playing', playing);
+  if (g) {
+    const mins = Math.round(g.minutes);
+    $('gameName').textContent = g.label;
+    $('gameNote').textContent = playing ? `Playing for ${mins < 1 ? 'under a minute' : mins + ' min'}`
+      : `Last session · ${mins} min · finished`;
+    $('gameGpu').innerHTML = `${playing ? fmt(g.gpu) : '–'}<small>%</small>`;
+    $('gameVram').innerHTML = `${playing ? GiB(g.vram) : GiB(g.peak_vram)}<small>GiB</small>`;
+    $('gAvgG').textContent = fmt(g.avg_gpu) + '%';
+    $('gPeak').textContent = fmt(g.peak_gpu) + '%';
+    $('gPow').textContent = fmt(g.avg_power) + ' W';
+    $('gTemp').textContent = fmt(g.peak_temp) + ' °C';
+    spark($('sGame'), [{ data: a.game_hist, color: 'var(--pink)', max: 100 }]);
+  } else {
+    $('gameNote').textContent = a.ok ? 'Start a game and it shows up here' : 'Waiting for Windows (needs WSL with powershell.exe)';
+  }
+  const max = Math.max(1, ...a.apps.map(x => x.gpu));
+  $('apps').innerHTML = a.apps.length ? a.apps.map(x => `<div class="app-row${x.game ? ' is-game' : ''}">
+      <span class="name" title="${esc(x.path || x.name)}">${x.game ? '🎮 ' : ''}${esc(x.label)}</span>
+      <span class="mono">${fmt(x.gpu)}%</span>
+      <span><div class="app-bar" style="width:${x.gpu / max * 100}%"></div></span>
+      <span class="mono">${GiB(x.vram)} GiB</span></div>`).join('')
+    : `<div class="note" style="margin-top:10px">${a.ok ? 'Nothing busy on the GPU' : 'Connecting to Windows…'}</div>`;
+}
+
 // Leaderboard: rebuilt only when its data changes, so the buttons don't flicker
 let boardSig = '';
 function renderBoard({ static: s, live: l }) {
@@ -357,7 +420,7 @@ $('benchCancel').addEventListener('click', () => post('/bench/cancel'));
 
 function connect() {
   const es = new EventSource('/stream');
-  es.onmessage = e => { const d = JSON.parse(e.data); render(d); renderBoard(d); };
+  es.onmessage = e => { const d = JSON.parse(e.data); render(d); renderGame(d); renderBoard(d); };
   es.onerror = () => { $('statusText').textContent = 'OFFLINE'; };
 }
 connect();

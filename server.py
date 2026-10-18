@@ -236,7 +236,7 @@ def sampler():
                            "quant": m["details"].get("quantization_level"),
                            "family": m["details"].get("family")}
                           for m in (tags or {}).get("models", [])],
-            "gen": gen, "bench": bench.snapshot(),
+            "gen": gen, "bench": bench.snapshot(), "apps": winapps.snapshot(),
         }
         with lock:
             if live["disks"] is None:
@@ -366,6 +366,118 @@ def post_json(path, payload):
 
 
 bench = Bench()
+
+
+# ---------------------------------------------------------------- Windows apps / games
+
+# Friendly names for processes that aren't games but often hold GPU memory.
+KNOWN_APPS = {
+    "vmwp": "WSL / Linux (incl. Ollama)", "dwm": "Windows desktop", "csrss": "Windows system",
+    "explorer": "File Explorer", "vmware-vmx": "VMware VM", "vmmem": "WSL / Linux (incl. Ollama)",
+    "searchhost": "Windows Search", "textinputhost": "Windows text input",
+    "shellexperiencehost": "Windows shell", "startmenuexperiencehost": "Start menu",
+}
+NOT_GAMES = set(KNOWN_APPS) | {
+    "brave", "chrome", "msedge", "firefox", "opera", "discord", "steam", "steamwebhelper",
+    "epicgameslauncher", "battle.net", "galaxyclient", "eadesktop", "obs64", "spotify",
+    "windowsterminal", "code", "slack", "teams", "ms-teams", "msedgewebview2", "nvcontainer",
+    "nvidia overlay", "nvidia app", "photoshop", "blender", "vlc", "claude", "zoom",
+    "widgets", "phoneexperiencehost", "applicationframehost", "lockapp", "medal",
+}
+GAME_DIRS = ("steamapps", "epic games", "gog galaxy", "riot games", "xboxgames",
+             "battle.net", "ubisoft", "ea games", "rockstar games", "games\\")
+
+
+class WinApps:
+    """Reads per-app GPU use from Windows (Task Manager's counters) and spots games."""
+
+    def __init__(self):
+        self.lock = threading.Lock()
+        self.apps, self.ok, self.game = [], False, None
+        self.game_hist = deque(maxlen=HISTORY)
+        self.script = ROOT / "gpu_apps.ps1"
+        if shutil.which("powershell.exe") and self.script.exists():
+            threading.Thread(target=self._reader, daemon=True).start()
+
+    def _reader(self):
+        win_path = subprocess.run(["wslpath", "-w", str(self.script)],
+                                  capture_output=True, text=True).stdout.strip()
+        while True:
+            proc = subprocess.Popen(
+                ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", win_path],
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True, cwd="/mnt/c")
+            for line in proc.stdout:
+                try:
+                    self._update(json.loads(line)["apps"])
+                except (ValueError, KeyError, TypeError):
+                    continue
+            time.sleep(5)  # watcher died; restart it
+
+    @staticmethod
+    def _label(a):
+        key = (a["name"] or "").lower()
+        if key in KNOWN_APPS:
+            return KNOWN_APPS[key]
+        # Window titles name games nicely, but for other apps they can leak
+        # browser tabs or document names, so use the program's description.
+        if a["game"]:
+            return a.get("title") or a.get("desc") or a["name"]
+        return a.get("desc") or a["name"]
+
+    @staticmethod
+    def _is_game(a):
+        name, path = (a["name"] or "").lower(), (a.get("path") or "").lower()
+        if name in NOT_GAMES:
+            return False
+        if any(d in path for d in GAME_DIRS):
+            return True
+        # Unknown app with a window that's working the 3D engine hard
+        return bool(a.get("title")) and (a.get("d3") or 0) > 15
+
+    def _update(self, apps):
+        now = time.time()
+        for a in apps:
+            a["game"] = self._is_game(a)
+            a["label"] = self._label(a)
+            a.pop("title", None)
+        apps.sort(key=lambda a: (-a["gpu"], -a["vram"]))
+        top = next((a for a in sorted(apps, key=lambda a: -a["d3"]) if a["game"]), None)
+        with lock:
+            live = state["live"]
+            power, temp = live.get("power"), live.get("temp")
+        with self.lock:
+            self.apps, self.ok = apps, True
+            g = self.game
+            if top and (not g or g["pid"] != top["pid"]):
+                g = self.game = {"pid": top["pid"], "label": top["label"], "start": now,
+                                 "samples": 0, "gpu_sum": 0, "peak_gpu": 0, "peak_vram": 0,
+                                 "power_sum": 0, "peak_temp": 0}
+                self.game_hist.clear()
+            if top:
+                g.pop("ended", None)
+                g.update(label=top["label"], gpu=top["gpu"], vram=top["vram"], last=now)
+                g["samples"] += 1
+                g["gpu_sum"] += top["gpu"]
+                g["power_sum"] += power or 0
+                g["peak_gpu"] = max(g["peak_gpu"], top["gpu"])
+                g["peak_vram"] = max(g["peak_vram"], top["vram"])
+                g["peak_temp"] = max(g["peak_temp"], temp or 0)
+                self.game_hist.append(top["gpu"])
+            elif g and now - g.get("last", 0) > 30:
+                g["ended"] = True  # keep showing the last session as a summary
+
+    def snapshot(self):
+        with self.lock:
+            g = dict(self.game) if self.game else None
+            if g:
+                n = max(g["samples"], 1)
+                g.update(avg_gpu=g["gpu_sum"] / n, avg_power=g["power_sum"] / n,
+                         minutes=((g.get("last") or g["start"]) - g["start"]) / 60,
+                         active=not g.get("ended"))
+            return {"ok": self.ok, "apps": self.apps[:8], "game": g, "game_hist": list(self.game_hist)}
+
+
+winapps = WinApps()
 
 
 # ---------------------------------------------------------------- web servers

@@ -1,6 +1,8 @@
 # GPU Bench
 
-A live dashboard for your NVIDIA GPU and local Ollama models. It shows tokens per second, power, heat and VRAM in real time, and includes a leaderboard that benchmarks every model you have installed on your own card.
+A live dashboard for your NVIDIA GPU and local Ollama models. It shows tokens per second, power, heat and VRAM in real time, which game you're playing and how hard it's working the card, and a leaderboard that benchmarks every model you have installed.
+
+> **Built for Windows + WSL2.** GPU Bench runs inside WSL2 (Ubuntu etc.) on a Windows PC with an NVIDIA card, with Ollama running in WSL. It reaches across to Windows to see your games and other apps. On plain Linux the GPU, Ollama and leaderboard cards still work, but the game card stays empty. macOS and AMD GPUs aren't supported.
 
 ![GPU Bench dashboard](docs/screenshot.png)
 
@@ -12,15 +14,18 @@ A live dashboard for your NVIDIA GPU and local Ollama models. It shows tokens pe
 - **VRAM:** split into the loaded model, other apps and free space
 - **Thermals:** temperature, fan speed and session peak
 - **Model:** the loaded Ollama model with its size, quantisation, context, GPU share and unload timer
+- **Now playing:** spots the game you're running on Windows and shows its GPU load, VRAM, average/peak load, power draw and hottest temperature for the session. Next to it is a Task Manager-style list of every Windows app using the GPU.
 - **Clocks, RAM, storage and card details:** driver, CUDA, VBIOS, PCIe link
 - **Leaderboard:** runs the same prompt against each model from a cold start and ranks them by tok/s, J/token, prompt speed, load time and how much of the model fits on the GPU. Untested models get a "should fit / spills to CPU / too big" prediction.
 
 ## Requirements
 
-- Python 3.8+ (standard library only, nothing to `pip install`)
-- An NVIDIA GPU with `nvidia-smi` available
-- [Ollama](https://ollama.com) for the model, tok/s and leaderboard features (the GPU cards work without it)
-- Linux or WSL2. Under WSL it opens the dashboard in your Windows browser.
+- **Windows 10/11 with WSL2** and an NVIDIA GPU (`nvidia-smi` works inside WSL with the normal Windows driver)
+- Python 3.8+ inside WSL (standard library only, nothing to `pip install`)
+- [Ollama](https://ollama.com) installed in WSL for the model, tok/s and leaderboard features (the GPU cards work without it)
+- `powershell.exe` reachable from WSL (it is by default) for the game card
+
+The dashboard opens in your normal Windows browser.
 
 ## Run it
 
@@ -45,6 +50,14 @@ base_url = "http://localhost:11435/v1"
 ```
 
 Requests that go straight to port 11434 still work; they just don't show up on the speed card.
+
+## How game detection works
+
+`gpu_apps.ps1` runs on the Windows side and reads the same per-process GPU counters Task Manager uses, about once every two seconds. A process counts as a game if it lives in a game library folder (Steam, Epic, GOG, Xbox, Riot, Ubisoft, EA, Battle.net, Rockstar) or if it has a window and is working the 3D engine hard without being a known non-game app such as a browser or Discord. Window titles are only shown for games, so browser tabs and document names never appear on the dashboard.
+
+FPS isn't shown: Windows doesn't expose frame rates through these counters.
+
+Monitoring costs very little while you play, but don't run the leaderboard during a game, because it competes for the GPU.
 
 ## Settings
 
